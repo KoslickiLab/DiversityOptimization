@@ -22,3 +22,5 @@ PythonCode/
           tests/  # a collection of test for the various python components
           data/  # any required data for the python code
 ```
+
+This readme will be extended as work progresses.
