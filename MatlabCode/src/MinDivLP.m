@@ -17,27 +17,31 @@ cols_vs_rows = 3;  % fix 3-times more columns than rows
 num_species = cols_vs_rows*4^small_k;  % reduce the number of columns of 
 % the sensing matrix so pictures will be generated in a reasonable amount
 % of time.
-A_k_small = A_k_small(:, 1:num_species);
+A_k_small = A_k_small(:, 1:num_species);  % Note: these are already column-normalized to be 1
 A_k_large = A_k_large(:, 1:num_species);
 
 %% Generate the B matrix
-B = (A_k_small > 0);
+B = (A_k_large > 0);
 
 %% Set some variables
 q = .1;  % fixed, small q value s.t. 0<q<1
-support_size = start:step_size:max_support;  % number of non-zero entries in the simulated ground truth
+support_size = 15;  % number of non-zero entries in the simulated ground truth
 
 %% create the simulated ground truth
 % create
 supp = datasample(1:num_species, support_size, 'Replace', false);  % location of the support
 true_x = zeros(num_species,1);  % the true x vector we are trying to reconstruct
-true_x(supp) = rand(suppSize,1);  % populate with random data
+true_x(supp) = rand(support_size,1);  % populate with random data
 true_x = true_x./sum(true_x);  % normalize to be a probability vector
 
+% noisless y-vectors
 y_small_true = A_k_small*true_x;
+y_large_true = A_k_large*true_x;
+
+% noisy y-vectors
 slop_factor = 2;  % this is for the non-regularized MinDivLP on noisy data
-noise_eps = .00001;
-y_small_noise = A_k_small*true_x + noise_eps*abs(rand(size(A_k_small,1),1));
+noise_eps = .00001;  % size of noise to add
+y_small_noise = A_k_small*true_x + noise_eps*abs(rand(size(A_k_small,1),1));  % add only noise to the small y-vector
 y_small_noise = y_small_noise./sum(y_small_noise);
 
 % optimization parameters
@@ -45,196 +49,45 @@ options = optimoptions('linprog','Algorithm','dual-simplex','Display','off','Dia
 
 %% Noisless computations
 
+f = 1./(B'*y_large_true).^(1-q);  % weighting factor in MinDivLP
+
+% MinDivLP
+
 % Using matlab built in linprog: too slow
-%[x_l1, ~, ~, ~, ~] = linprog(ones(1,num_species), [], [], A_k_small, A_k_small*true_x, zeros(1,num_species), ones(1,num_species), options);  % if you do not have a Gurobi license, you can use the built in linprob
+%[x_star, ~, ~, ~, ~] = linprog(f, [], [], A_k_small, y_sm, zeros(1,num_species), ones(1,num_species), options);  % if you do not have a Gurobi license, you can use the built in linprob
+%x_star = x_star/sum(x_star);  % normalize
 
+% Using the linprog_gurobi (code optained from Gurobi). Requires a Gurobi
+% license from https://www.gurobi.com/downloads/free-academic-license/ and
+% downloading their software from https://www.gurobi.com/downloads/gurobi-optimizer-eula/
+[x_star, ~, ~, ~, ~] = linprog_gurobi(f, [], [], A_k_small, y_small_true, zeros(1,num_species), ones(1, num_species), options);  % again, can substitute linprog
+x_star = x_star/sum(x_star);  % normalize
 
-for i=1:length(h_sizes)
-            y_s{i} = A_hs{i}*true_x;
-        end
-        
-        slop_factor = 1;
-        noise_eps = .00001;
-        y_noise = A_k_small*true_x + noise_eps*abs(rand(size(A_k_small,1),1));
-        y_noise = y_noise./sum(y_noise);
-        
-        % optimization parameters
-        options = optimoptions('linprog','Algorithm','dual-simplex','Display','off','Diagnostics','off', 'ConstraintTolerance', .0000001, 'OptimalityTolerance', .0000001);
+%% Noisy computations
 
-        % Unweighted L1 optimization
-        % no noise
-        %[x_l1, ~, ~, ~, ~] = linprog_gurobi(ones(1,num_species), [], [], A_k_small, A_k_small*true_x, zeros(1,num_species), ones(1, num_species), options);
-        
-        % with noise
-        %[x_l1, ~, ~, ~, ~] = linprog_gurobi(ones(1,num_species), [A_k_small; -A_k_small], [y_noise+slop_factor*noise_eps; -y_noise+slop_factor*noise_eps], [], [], zeros(1,num_species), ones(1, num_species), options);
-        
-        % matlab linprog too slow
-        %[x_l1, ~, ~, ~, ~] = linprog(ones(1,num_species), [], [],A_k_small, A_k_small*true_x, zeros(1,num_species), ones(1,num_species), options);  % if you do not have a Gurobi license, you can use the built in linprob
-        
-        %x_l1 = x_l1./sum(x_l1);  % normalize
-        %temp_l1(rep) = sum(abs(true_x - x_l1));  % store the error
-        
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % Temp little test
-        % Weighted quikr/regularized Mindiv (store it in x_l1 just so I
-        % don't need to recode things
-        lambda = 10000;
-        i = length(h_sizes);
-        f = 1./(B_transpose_hs{i}*y_s{i}).^(1-q);
-        x_l1 = lsqnonneg([f'; lambda*A_k_small], [0;lambda*y_noise]);
-        x_l1 = x_l1./sum(x_l1);  % normalize
-        temp_l1(rep) = sum(abs(true_x - x_l1));  % store the error
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % Conclusion: This appears to be the best!!!!!!!
-        % Go with this for real-world data
-        % For a possible python clone (no idea how it performs), see:
-        % https://github.com/matthew-brett/diffusion_mri/blob/master/Python/lsqnonneg.py
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        
-        % quikr
-        lambda = 10000;
-        tic;
-        % no noise
-        %x_q = lsqnonneg([ones(1, num_species); lambda*A_k_small], [0;lambda*A_k_small*true_x]);
-        % with noise
-        x_q = lsqnonneg([ones(1, num_species); lambda*A_k_small], [0;lambda*y_noise]);
-        x_q = x_q/sum(x_q);
-        %x_q = ones(num_species, 1);
-        temp_q(rep) = sum(abs(true_x - x_q));
+f = 1./(B'*y_large_true).^(1-q);  % weighting factor in MinDivLP, no noise in this y vector
 
-        % weighted optimization, over all h sizes
-        for i=1:length(h_sizes)
-            f = 1./(B_transpose_hs{i}*y_s{i}).^(1-q);
-            % no noise
-            %[x_star, ~, ~, ~, ~] = linprog_gurobi(f, [], [], A_k_small, A_k_small*true_x, zeros(1,num_species), ones(1, num_species), options);  % again, can substitute linprog
-            % with noise
-            [x_star, ~, ~, ~, ~] = linprog_gurobi(f, [A_k_small; -A_k_small], [y_noise+slop_factor*noise_eps; -y_noise+slop_factor*noise_eps], [], [], zeros(1,num_species), ones(1, num_species), options);  % again, can substitute linprog
-            x_star = x_star./sum(x_star);
-            temp_weighteds(i, rep) = sum(abs(true_x - x_star));
-            temp_posteriori_test(i, rep) = sum(abs(A_k_large*true_x - A_k_large*x_star));
-        end
-    end
-    unweighted_errors(:, suppSizeInd) = temp_l1;
-    quikr_errors(:, suppSizeInd) = temp_q;
-    weighted_errors(:, :, suppSizeInd) = temp_weighteds;
-    posteriori_test(:, :, suppSizeInd) = temp_posteriori_test;
-    %ppm.increment()
-end
-fprintf('Finished\n')
-toc
+% Relaxing the A^{(h)} y^{(h)} = x
+% Turns out this is not so good
+%[x_star, ~, ~, ~, ~] = linprog_gurobi(f, [A_k_small; -A_k_small], [y_small_noise+slop_factor*noise_eps; -y_small_noise+slop_factor*noise_eps], [], [], zeros(1,num_species), ones(1, num_species), options);  % again, can substitute linprog
+%x_star = x_star./sum(x_star);  % normalize
 
-%% L1 norm error plot: plot of L1 error between true x and reconstructed x 
-% (averaged over the number of replicates) as a function of support size ||x||_0
-colors = linspecer(2+length(h_sizes));
-fs = 15;
-set(groot,'defaultAxesColorOrder', [0 0 0], 'DefaultAxesLineStyleOrder','-|--|:|-.|-*')
-line_width = 2;
-figure();
+% Instead, do the Quikr trick and bring the A^{(h)} y^{(h)} = x inside the
+% objective function via lambda^2*||A^{(h)} y^{(h)} - x||_2^2
+% then we can use the active set algorithm lsqnonneg
+lambda = 10000;  % technically, this is lambda^2, but whatever
+x_star = lsqnonneg([f'; lambda*A_k_small], [0;lambda*y_small_noise]);  % the regularized version of MinDivLP for noisy data
+x_star = x_star./sum(x_star);  % normalize
+%% Measure the reconstruction accuracy
+error_l1 = norm(x_star - true_x, 1);
+error_l2 = norm(x_star - true_x, 2);
+fprintf('L1 error is: %f\n', error_l1);
+fprintf('L2 error is: %f\n', error_l2);
+
+%% Plot things just to sanity check
+f = figure();
 hold on
-plot(support_sizes, mean(unweighted_errors), 'LineWidth', line_width, 'Color', colors(1,:))
-plot(support_sizes, mean(quikr_errors), 'LineWidth', line_width, 'Color', colors(2,:))
-for i=1:length(h_sizes)
-     plot(support_sizes, mean(squeeze(weighted_errors(i,:,:))), 'LineWidth', line_width, 'MarkerSize', 4, 'Color', colors(i+2,:))
-end
-ylabel('Mean L1 error', 'FontSize', fs)
-xlabel('Support size', 'FontSize', fs)
-title(sprintf('Reconstruction performance: L1 norm using k = %d', small_k))
-legends = {};
-legends{1} = 'Unweighted';
-legends{2} = 'Quikr';
-for i=1:length(h_sizes)
-       legends{i+2} = sprintf('Weighted, h = %d', h_sizes(i));
-end
-lgd = legend(legends{:});
-lgd.FontSize = fs;
-%set(gca,'DataAspectRatio',[15 1 1])
-%x= 1.5;
-%set(gcf,'Position',[x*100 x*100 x*500 x*500])
-ax = gca;
-outerpos = ax.OuterPosition;
-ti = ax.TightInset; 
-left = outerpos(1) + ti(1);
-bottom = outerpos(2) + ti(2);
-ax_width = outerpos(3) - ti(1) - ti(3);
-ax_height = outerpos(4) - ti(2) - ti(4);
-ax.Position = [left bottom ax_width ax_height];
-%saveas(gcf, 'Figures/L1NormErrorMultiK.png')
+plot(1:num_species, x_star, 'bo-');
+plot(1:num_species, true_x, 'ko-');
+legend('Reconstructed', 'True')
 
-%% Percent recovered plot:
-% The percentage (over all replicates) of successful recoveries as a 
-% function of the support size
-thresh = 1e-1;  % anything L1 error smaller than this is considered "successful"
-
-colors = linspecer(2+length(h_sizes));
-fs = 15;
-set(groot,'defaultAxesColorOrder', [0 0 0], 'DefaultAxesLineStyleOrder','-|--|:|-.|-*')
-line_width = 2;
-figure();
-hold on
-plot(support_sizes, mean(unweighted_errors<thresh), 'LineWidth', line_width, 'Color', colors(1,:))
-plot(support_sizes, mean(quikr_errors<thresh), 'LineWidth', line_width, 'Color', colors(2,:))
-for i=1:length(h_sizes)
-     plot(support_sizes, mean(squeeze(weighted_errors(i,:,:))<thresh), 'LineWidth', line_width, 'MarkerSize', 4, 'Color', colors(i+2,:))
-end
-ylabel('Percent recovered', 'FontSize', fs)
-xlabel('Support size', 'FontSize', fs)
-legends = {};
-legends{1} = '$\ell_1$';
-legends{2} = 'Quikr';
-for i=1:length(h_sizes)
-       legends{i+2} = sprintf('h = %d', h_sizes(i));
-end
-lgd = legend(legends{:},'Interpreter','latex');
-lgd.FontSize = fs;
-set(gca,'DataAspectRatio',[20 1 1])
-%x= 1.5;
-%set(gcf,'Position',[x*100 x*100 x*500 x*500])
-ax = gca;
-outerpos = ax.OuterPosition;
-ti = ax.TightInset; 
-left = outerpos(1) + ti(1);
-bottom = outerpos(2) + ti(2);
-ax_width = outerpos(3) - ti(1) - ti(3);
-ax_height = outerpos(4) - ti(2) - ti(4);
-ax.Position = [left bottom ax_width ax_height];
-%saveas(gcf, 'Figures/UnweightedVsWeightedMultiK.png')
-
-%% Demonstrate the a posteriori test
-thresh = 1e-5;  % anything L1 error smaller than this is considered "successful"
-
-colors = linspecer(1+length(h_sizes));
-fs = 15;
-set(groot,'defaultAxesColorOrder', [0 0 0], 'DefaultAxesLineStyleOrder','-|--|:|-.|-*')
-line_width = 2;
-fig = figure();
-set(fig,'defaultAxesColorOrder',[colors(1,:); colors(2,:)]);
-hold on
-i = length(h_sizes);
-x = support_sizes;
-yyaxis left
-plot(x, mean(squeeze(weighted_errors(i,:,:))<thresh), 'LineWidth', line_width, 'MarkerSize', 4, 'Color', colors(1,:))
-yyaxis right
-plot(x, mean(squeeze(posteriori_test(i,:,:))), 'LineWidth', line_width, 'MarkerSize', 4, 'Color', colors(2,:))
-yyaxis left
-ylabel('Percent recovered', 'FontSize', fs)
-xlabel('Support size', 'FontSize', fs)
-yyaxis right
-ylabel('$||A^{(h)}x - y^{(h)}||_1$', 'FontSize', fs, 'Interpreter','latex')
-%set(fig,'DataAspectRatio',[112.5,1,2.5])
-set(gca,'DataAspectRatio',[112.5,1,2.5])
-set(gca,'PlotBoxAspectRatio',[1,0.533333333333333,0.533333333333333])
-%x = 1.5;
-%set(gcf,'Position',[x*100 x*100 x*500 x*500])
-ax = gca;
-%outerpos = ax.OuterPosition;
-%ti = ax.TightInset; 
-%left = outerpos(1) + ti(1);
-%bottom = outerpos(2) + ti(2);
-%ax_width = outerpos(3) - ti(1) - ti(3);
-%ax_height = outerpos(4) - ti(2) - ti(4);
-%ax.Position = [left bottom ax_width ax_height];
-%saveas(gcf, 'Figures/aposterioriMultiK.png')
-%% export the data
-%if ~isfile('CooccurenceReproduciblesMultiData.mat')
-%    save('CooccurenceReproduciblesMultiData.mat')
-%end
