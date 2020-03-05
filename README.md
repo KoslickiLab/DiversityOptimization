@@ -14,11 +14,12 @@ MatlabCode/  # basic matlab code containing a simplified version of https://gith
           README.md  # a file describing what is in this folder
           src/  # the folder that contains the basic algorithm to be ported to python
           data/  # data required to run the matlab code
+          tests/  # a collection of tests to show how to call the MinDivLP code
 PythonCode/
           README.md  # a file describing what is in this folder
           requirements.txt  # a file containing the necessary requirements to run the python code
           src/  # a folder containing the modules that contain the port of the matlab code
           scripts/  # a folder containing wrappers that call the src/ modules in a command line interface friendly way
-          tests/  # a collection of test for the various python components
+          tests/  # a collection of tests for the various python components
           data/  # any required data for the python code
 ```
