@@ -12,6 +12,7 @@ A basic layout of the folder structure is as follows:
 README.md  # this file
 MatlabCode/  # basic matlab code containing a simplified version of https://github.com/dkoslicki/MinimizeBiologicalDiversity
           README.md  # a file describing what is in this folder
+          src/  # the folder that contains the basic algorithm to be ported to python
           data/  # data required to run the matlab code
 PythonCode/
           README.md  # a file describing what is in this folder
