@@ -1,6 +1,6 @@
 %% import the data
 A_k = load('../data/97_otus_subset.fasta_A_6.mat');
-A_k = A_k.A_k;
+A_k_small = A_k.A_k;
 
 %% Performe computations from scratch
 % set variables
