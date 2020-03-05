@@ -1,91 +1,55 @@
 %% import the data
-A_k = load('../data/97_otus_subset.fasta_A_6.mat');
-A_k_small = A_k.A_k;
-
-%% Performe computations from scratch
 % set variables
 small_k = 4;  % smaller k-mer size
-%h_sizes = [4, 6, 13]; % h range
-h_sizes = [6, 13]; % h range
+large_k = 6;  % larger k-mer size
+
+A_k = load(sprintf('../data/97_otus_subset.fasta_A_%d.mat', large_k));
+A_k_large = A_k.A_k;
+
+A_k = load(sprintf('../data/97_otus_subset.fasta_A_%d.mat', small_k));
+A_k_small = A_k.A_k;
+
+clear('A_k')  % get rid of unneeded variable
+
+%% sub-select the data so things run quickly
 
 cols_vs_rows = 3;  % fix 3-times more columns than rows
 num_species = cols_vs_rows*4^small_k;  % reduce the number of columns of 
 % the sensing matrix so pictures will be generated in a reasonable amount
 % of time.
+A_k_small = A_k_small(:, 1:num_species);
+A_k_large = A_k_large(:, 1:num_species);
 
-%% import the data
-addpath(genpath('Data'))
-file = sprintf('97_otus_subset.fasta_A_%d.mat', small_k);
-A_k_small = load(file);
-A_k_small = A_k_small.A_k(:,1:num_species);  % sensing matrix
+%% Generate the B matrix
+B = (A_k_small > 0);
 
-A_hs = {};
-% compute the B matrices used to form Z = B*A
-B_transpose_hs = {};
+%% Set some variables
+q = .1;  % fixed, small q value s.t. 0<q<1
+support_size = start:step_size:max_support;  % number of non-zero entries in the simulated ground truth
+
+%% create the simulated ground truth
+% create
+supp = datasample(1:num_species, support_size, 'Replace', false);  % location of the support
+true_x = zeros(num_species,1);  % the true x vector we are trying to reconstruct
+true_x(supp) = rand(suppSize,1);  % populate with random data
+true_x = true_x./sum(true_x);  % normalize to be a probability vector
+
+y_small_true = A_k_small*true_x;
+slop_factor = 2;  % this is for the non-regularized MinDivLP on noisy data
+noise_eps = .00001;
+y_small_noise = A_k_small*true_x + noise_eps*abs(rand(size(A_k_small,1),1));
+y_small_noise = y_small_noise./sum(y_small_noise);
+
+% optimization parameters
+options = optimoptions('linprog','Algorithm','dual-simplex','Display','off','Diagnostics','off', 'ConstraintTolerance', .0000001, 'OptimalityTolerance', .0000001);
+
+%% Noisless computations
+
+% Using matlab built in linprog: too slow
+%[x_l1, ~, ~, ~, ~] = linprog(ones(1,num_species), [], [], A_k_small, A_k_small*true_x, zeros(1,num_species), ones(1,num_species), options);  % if you do not have a Gurobi license, you can use the built in linprob
+
+
 for i=1:length(h_sizes)
-    h = h_sizes(i);
-    file = sprintf('97_otus_subset.fasta_A_%d.mat', h);
-    A_k_large = load(file);
-    A_k_large = A_k_large.A_k(:,1:num_species);  % Used to form Z = B*A^{(h)}
-    B_k_large = (A_k_large>0);
-    B_k_large_tr = B_k_large';
-    A_hs{i} = A_k_large;
-    B_transpose_hs{i} = B_k_large_tr;
-end
-
-
-%% Simulations
-% random vectors will be generated with a specified support size, and each
-% of three methods will be used in an attempt to recover these vectors
-% using:
-% 1. Standard, unweighted L1 minimization
-% 2. The optimization proceedure (??) using h = k
-% 3. The optimization proceedure (??) using h > h
-% Performance will be assessed in terms of L1 norm between the true vector 
-% and the reconstructed vector.
-
-% WARNING: this calculation takes a significant amount of time when
-% small_k >= 4 (on the order of hours)
-
-q = .01;  % fixed, small q value s.t. 0<q<1
-start = 15;  % the starting support size
-step_size = 5;  % how much to increase the support size in each step
-max_support = 35;  % maximum support size
-support_sizes = start:step_size:max_support;  % vector of support sizes
-num_reps = 20;  % number of replicates to perform at each step_size
-
-% a series of matrices to store the L1 errors for each of the three
-% optimization proceedures.
-unweighted_errors = zeros(num_reps,length(support_sizes));
-quikr_errors = zeros(num_reps,length(support_sizes));
-weighted_errors = zeros(length(h_sizes), num_reps, length(support_sizes));
-posteriori_test = zeros(length(h_sizes), num_reps, length(support_sizes));
-
-%parpool()  % Either manually start the parallel pool, or else Matlab will
-%do it automatically when it sees the parfor (unless you have disabled the
-%option)
-
-%ppm = ParforProgMon('Please wait, working... ', length(support_sizes));
-
-tic
-parfor suppSizeInd=1:length(support_sizes)  % for each of the support sizes
-    suppSize = support_sizes(suppSizeInd);
-    
-    % matrices to hold the errors at each replicated
-    temp_l1 = zeros(1, num_reps);
-    temp_q = zeros(1, num_reps);
-    temp_weighteds = zeros(length(h_sizes), num_reps);
-    temp_posteriori_test = zeros(length(h_sizes), num_reps);
-    
-    fprintf('On support size %d of %d\n', suppSizeInd, length(support_sizes));
-    for rep=1:num_reps  % perform num_reps of replicates
-        supp = datasample(1:num_species, suppSize, 'Replace', false);  % size of the support
-        true_x = zeros(num_species,1);  % the true x vector we are trying to reconstruct
-        true_x(supp) = rand(suppSize,1);
-        true_x = true_x./sum(true_x);  % normalize to be a probability vector
-        
-        y_s = {}; % measurement vectors
-        for i=1:length(h_sizes)
             y_s{i} = A_hs{i}*true_x;
         end
         
