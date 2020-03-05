@@ -1,19 +1,6 @@
-%% Section 5: algorithm for co-occurrence similarity matrix
-% In this section, we analyze the optimization procedure given in equation
-% (??)
-
-% Note: this works in MATLAB R2019a, but does not appear to work in version
-% R2019b due to linprob_gurobi not playing well with R2019b
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Import pre-computed data
-% The following series of computations took 22 minutes on an 18 core
-% i9-9980XE processor. As such, you may wish to import the following data
-% and skip directly to the visualizations
-if isfile('CooccurenceReproduciblesMultiData.mat')
-    load('CooccurenceReproduciblesMultiData.mat')
-end
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% import the data
+A_k = load('../data/97_otus_subset.fasta_A_6.mat');
+A_k = A_k.A_k;
 
 %% Performe computations from scratch
 % set variables
