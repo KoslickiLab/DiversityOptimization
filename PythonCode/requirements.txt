@@ -1,0 +1,3 @@
+#required python packages will go here
+numpy
+scipy
