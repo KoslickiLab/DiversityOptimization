@@ -12,7 +12,6 @@ A_k_small = A_k.A_k;
 clear('A_k')  % get rid of unneeded variable
 
 %% sub-select the data so things run quickly
-
 cols_vs_rows = 3;  % fix 3-times more columns than rows
 num_species = cols_vs_rows*4^small_k;  % reduce the number of columns of 
 % the sensing matrix so pictures will be generated in a reasonable amount
@@ -28,7 +27,7 @@ q = .1;  % fixed, small q value s.t. 0<q<1
 support_size = 15;  % number of non-zero entries in the simulated ground truth
 
 %% create the simulated ground truth
-% create
+
 supp = datasample(1:num_species, support_size, 'Replace', false);  % location of the support
 true_x = zeros(num_species,1);  % the true x vector we are trying to reconstruct
 true_x(supp) = rand(support_size,1);  % populate with random data
