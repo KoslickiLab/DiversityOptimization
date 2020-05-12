@@ -1,8 +1,9 @@
 import scipy.io as sio
 import numpy as np
 import numpy.random as rand
-from numpy.linalg import norm
+import time
 from PythonCode.src.MinDivLP import MinDivLP
+from numpy.linalg import norm
 from matplotlib import pyplot as plt
 
 ## import the data
@@ -53,13 +54,16 @@ y_small_noise = y_small_noise / sum(y_small_noise)
 ## Noisy computations
 
 const = 10000
+start = time.time()
 x_star = MinDivLP(A_k_small.toarray(), A_k_large.toarray(), y_small_noise, y_large_true, const, q).reshape(num_species, 1)
+end = time.time()
 
 ## Measure the reconstruction accuracy
 error_l1 = norm(x_star - true_x, 1)
 error_l2 = norm(x_star - true_x, 2)
 print('L1 error is: %f.' % error_l1)
 print('L2 error is: %f.' % error_l2)
+print('Time elapsed for MinDivLP: %f seconds.' % (end - start))
 
 ## Sanity check plot
 plt.plot(range(1, num_species + 1), x_star, 'b.', label='Reconstructed')
