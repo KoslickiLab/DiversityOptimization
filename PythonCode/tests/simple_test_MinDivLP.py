@@ -1,6 +1,5 @@
 ## Simple test for MinDivLP code
 import numpy as np
-from numpy.linalg import norm
 from PythonCode.src.MinDivLP import MinDivLP
 from numpy.linalg import norm
 
