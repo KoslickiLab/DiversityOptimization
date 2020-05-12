@@ -53,7 +53,7 @@ y_small_noise = y_small_noise / sum(y_small_noise)
 ## Noisy computations
 
 const = 10000
-x_star = MinDivLP(A_k_small, A_k_large, y_small_noise, y_large_true, const, q).reshape(num_species, 1)
+x_star = MinDivLP(A_k_small.toarray(), A_k_large.toarray(), y_small_noise, y_large_true, const, q).reshape(num_species, 1)
 
 ## Measure the reconstruction accuracy
 error_l1 = norm(x_star - true_x, 1)

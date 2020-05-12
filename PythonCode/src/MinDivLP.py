@@ -26,5 +26,5 @@ def MinDivLP(A_k_small, A_k_large, y_small, y_large, const, q):
     B = A_k_large > 0
     f = 1 / np.power(B.T @ y_large, 1-q)
 
-    x_star = nnls(np.vstack( (f.T, const*A_k_small.toarray()) ), np.append(0, const*y_small))[0]
+    x_star = nnls(np.vstack( (f.T, const*A_k_small) ), np.append(0, const*y_small))[0]
     return x_star / sum(x_star)
