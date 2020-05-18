@@ -1,3 +1,4 @@
+#! /usr/bin/env python
 import argparse
 import os
 import sys
@@ -12,7 +13,7 @@ if __name__ == '__main__':
 						help="count compliment of sequences as well", default=False)
 	parser.add_argument('-i', '--input_file', type=str, help="File name of input database")
 	parser.add_argument('-o', '--output_file', type=str,
-						help="Output file of sparse representation of sensing matrix `A` in text form.")
+						help="Output file of sparse representation of sensing matrix `A` in text form.", required=True)
 
 	# read in the arguments
 	args = parser.parse_args()
@@ -31,9 +32,9 @@ if __name__ == '__main__':
 		raise Exception("It appears that dna-utils is not installed. Please consult the README, install dna-utils, and try again.")
 
 	if count_rev:
-		res = subprocess.run(f"kmer_counts_per_sequence -i {input_file_name} -k ${k_size} -c -s > {output_file_name}", shell=True, stdout=subprocess.DEVNULL)
+		res = subprocess.run(f"kmer_counts_per_sequence -i {input_file_name} -k {k_size} -c -s > {output_file_name}", shell=True, stdout=subprocess.DEVNULL)
 	else:
-		res = subprocess.run(f"kmer_counts_per_sequence -i {input_file_name} -k ${k_size} -s > {output_file_name}", shell=True, stdout=subprocess.DEVNULL)
+		res = subprocess.run(f"kmer_counts_per_sequence -i {input_file_name} -k {k_size} -s > {output_file_name}", shell=True, stdout=subprocess.DEVNULL)
 
 	if res.returncode == 0:
 		print("Finished successfully")
