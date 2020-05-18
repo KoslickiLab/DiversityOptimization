@@ -2,6 +2,9 @@ import scipy.io as sio
 import numpy as np
 import numpy.random as rand
 import time
+import sys
+import os
+sys.path.append(os.path.abspath("../.."))  # make sure python knows where to find the code
 from PythonCode.src.MinDivLP import MinDivLP
 from numpy.linalg import norm
 from matplotlib import pyplot as plt
