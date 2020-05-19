@@ -65,8 +65,3 @@ if __name__ == '__main__':
     y = np.fromstring(res.stdout.decode('utf-8'), sep='\n', dtype=int)
     y_norm = y / np.sum(y)
     sio.savemat(output_file_name, {"y": y_norm}, do_compression=True)
-
-# TODO
-# test with something like
-# kmc -fa -k4 -ci0 -cs1000000 mock_16S_metagenome.fa mock_16S_metagenome.fa.kmc .
-# kmc_dump -ci0 -cs1000000 mock_16S_metagenome.fa.kmc mock_16S_metagenome.fa.kmc.dump

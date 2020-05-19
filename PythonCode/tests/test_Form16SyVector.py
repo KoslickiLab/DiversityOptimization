@@ -4,7 +4,7 @@ import scipy.io as sio
 import numpy as np
 import os
 
-# Revcomp
+# No Revcomp
 with tempfile.NamedTemporaryFile() as temp_file:
     output_file = temp_file.name
 
