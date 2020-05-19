@@ -1,9 +1,11 @@
 #! /usr/bin/env python
 import argparse
 import os
-import sys
 import subprocess
-
+import numpy as np
+from scipy.sparse import coo_matrix
+import scipy.io as sio
+from sklearn.preprocessing import normalize
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(
@@ -13,7 +15,7 @@ if __name__ == '__main__':
 						help="count compliment of sequences as well", default=False)
 	parser.add_argument('-i', '--input_file', type=str, help="File name of input database")
 	parser.add_argument('-o', '--output_file', type=str,
-						help="Output file of sparse representation of sensing matrix `A` in text form.", required=True)
+						help="Output file of sparse representation of sensing matrix `A` in .mat format.", required=True)
 
 	# read in the arguments
 	args = parser.parse_args()
@@ -32,12 +34,17 @@ if __name__ == '__main__':
 		raise Exception("It appears that dna-utils is not installed. Please consult the README, install dna-utils, and try again.")
 
 	if count_rev:
-		res = subprocess.run(f"kmer_counts_per_sequence -i {input_file_name} -k {k_size} -c -s > {output_file_name}", shell=True, stdout=subprocess.DEVNULL)
+		res = subprocess.run(f"kmer_counts_per_sequence -i {input_file_name} -k {k_size} -c -s", shell=True, stdout=subprocess.PIPE)
 	else:
-		res = subprocess.run(f"kmer_counts_per_sequence -i {input_file_name} -k {k_size} -s > {output_file_name}", shell=True, stdout=subprocess.DEVNULL)
+		res = subprocess.run(f"kmer_counts_per_sequence -i {input_file_name} -k {k_size} -s", shell=True, stdout=subprocess.PIPE)
 
 	if res.returncode == 0:
-		print("Finished successfully")
+		print("Sparse matrix created, now converting to .mat format")
 	else:
 		print("An unexpected error was encountered, please check the input FASTA file is in the correct format. If errors persist, contact the developers.")
 
+	sparse_text_form = res.stdout.decode('utf-8')  # convert from bytes to string
+	J, I, V = np.fromstring(sparse_text_form, dtype=int, sep='\t').reshape((-2, 3)).transpose()  # pull out the indicies
+	sparse_matrix_form = coo_matrix((V, (I, J)), shape=(4 ** k_size, J[-1] + 1))  # convert to sparse matrix format
+	sparse_matrix_form_norm = normalize(sparse_matrix_form, norm='l1', axis=0)  # normalize by rows
+	sio.savemat(output_file_name, {"A_k": sparse_matrix_form_norm}, do_compression=True)
