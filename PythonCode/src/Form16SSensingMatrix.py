@@ -44,7 +44,7 @@ if __name__ == '__main__':
 		print("An unexpected error was encountered, please check the input FASTA file is in the correct format. If errors persist, contact the developers.")
 
 	sparse_text_form = res.stdout.decode('utf-8')  # convert from bytes to string
-	J, I, V = np.fromstring(sparse_text_form, dtype=int, sep='\t').reshape((-2, 3)).transpose()  # pull out the indicies
+	J, I, V = np.array(list(map(int,sparse_text_form.split()))).reshape((-2, 3)).transpose()  # pull out the indicies
 	sparse_matrix_form = coo_matrix((V, (I, J)), shape=(4 ** k_size, J[-1] + 1))  # convert to sparse matrix format
 	sparse_matrix_form_norm = normalize(sparse_matrix_form, norm='l1', axis=0)  # normalize by rows
 	sio.savemat(output_file_name, {"A_k": sparse_matrix_form_norm}, do_compression=True)
