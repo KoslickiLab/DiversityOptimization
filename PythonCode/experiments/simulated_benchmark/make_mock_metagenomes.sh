@@ -10,7 +10,7 @@ set -e
 # requires bbmap: https://sourceforge.net/projects/bbmap/
 
 #bbmapRandomReads="~/Documents/bbmap/randomreads.sh"
-bbmapRandomReads=$1
+bbmapRandomReads=$1  # read the first input to this script, which should be the location of randomreads.sh
 
 if [ -f "$bbmapRandomReads" ]; then
     echo "$bbmapRandomReads exist"
