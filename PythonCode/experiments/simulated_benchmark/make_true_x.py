@@ -3,6 +3,19 @@ import numpy as np
 
 
 def make_true_x(metagenome, reference):
+    """ make_true_x
+    Creates vector of the population proportions of a metagenome, each index representing proportions of the sequences
+        from a reference genome (in the order of the reference genome)
+    Call via:
+    true_x = make_true_x(metagenome, reference)
+    Parameters are:
+    metagenome is the string location of the sample metagenome
+    reference is the string location of the reference database
+
+    Returns:
+    x: an ndarray where the i-th element represents the proportion in metagenome of the i-th sequence listed in
+        reference
+    """
 
     bbmap_dir = "bbmap"  # location of bbmap
 
@@ -27,5 +40,4 @@ def make_true_x(metagenome, reference):
                 loc = ids.index(line[1:-1])
                 x.append(unordered_x[loc])
 
-    ## Normalize x to represent population proportions
     return np.array(x)
