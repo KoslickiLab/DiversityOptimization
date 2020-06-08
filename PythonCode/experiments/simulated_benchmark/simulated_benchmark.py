@@ -14,7 +14,7 @@ from PythonCode.src.MinDivLP import MinDivLP
 from scipy.linalg import norm
 
 ## Data writing information
-resultCSV = "big_results.csv"
+resultCSV = "results.csv"
 
 ## Parameters for parallelization
 large_k_vals = [8, 10, 12]  # larger k-mer size
@@ -74,51 +74,75 @@ def simulate(large_k, mock_maker, csv_name, bbmap_dir):
                         error_type, error, _ = sys.exc_info()
                         raise Exception(f"Metagenome and reference creation failed due to {error}")
 
+                    # Create true_x
+                    true_x = make_true_x(f"mock_16S_metagenome.fa", reference_genome, bbmap_dir)
+
+                    # Create true_x_full
+                    try:
+                        true_x_full = make_true_x("mock_16S_metagenome.fa", full_reference_genome, bbmap_dir)
+                    except:
+                        tb = traceback.format_exc()
+                        error_type, error, _ = sys.exc_info()
+                        raise Exception(f"error_type: {error_type}\n error: {error}")
+
+                    # Create A_k_small and A_k_large from mock reference database
+                    if reference_genome:
+
+                        with tempfile.NamedTemporaryFile() as temp_file:
+                            output_file = temp_file.name
+
+                            to_run = f"python ../../src/Form16SSensingMatrix.py -k {small_k} -i {reference_genome} -o {output_file}"
+                            res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL,
+                                                 stderr=subprocess.DEVNULL)
+                            if res.returncode != 0:
+                                raise Exception("Failed to form A_k_small")
+
+                            A_k_small = sio.loadmat(output_file)['A_k']
+
+                            to_run = f"python ../../src/Form16SSensingMatrix.py -k {large_k} -i {reference_genome} -o {output_file}"
+                            res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL,
+                                                 stderr=subprocess.DEVNULL)
+                            if res.returncode != 0:
+                                raise Exception("Failed to form A_k_large")
+
+                            A_k_large = sio.loadmat(output_file)['A_k']
+
+                    # Create y_small and y_large
+                    with tempfile.NamedTemporaryFile() as temp_file:
+                        output_file = temp_file.name
+
+                        to_run = f"python ../../src/Form16SyVector.py -k {small_k} -i mock_16S_metagenome.fa -o {output_file}"
+                        res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL,
+                                             stderr=subprocess.DEVNULL)
+                        if res.returncode != 0:
+                            raise Exception("Failed to form y_small")
+
+                        y_small = sio.loadmat(output_file)['y'].T
+
+                        to_run = f"python ../../src/Form16SyVector.py -k {large_k} -i mock_16S_metagenome.fa -o {output_file}"
+                        res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL,
+                                             stderr=subprocess.DEVNULL)
+                        if res.returncode != 0:
+                            raise Exception("Failed to form y_large")
+
+                        y_large = sio.loadmat(output_file)['y'].T
+
                     for q in q_vals:
 
                         for const in lambda_vals:
-
-                            # Create y_small and y_large
-                            with tempfile.NamedTemporaryFile() as temp_file:
-                                output_file = temp_file.name
-
-                                to_run = f"python ../../src/Form16SyVector.py -k {small_k} -i mock_16S_metagenome.fa -o {output_file}"
-                                res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL,
-                                                     stderr=subprocess.DEVNULL)
-                                if res.returncode != 0:
-                                    raise Exception("Failed to form y_small")
-
-                                y_small = sio.loadmat(output_file)['y'].T
-
-                                to_run = f"python ../../src/Form16SyVector.py -k {large_k} -i mock_16S_metagenome.fa -o {output_file}"
-                                res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL,
-                                                     stderr=subprocess.DEVNULL)
-                                if res.returncode != 0:
-                                    raise Exception("Failed to form y_large")
-
-                                y_large = sio.loadmat(output_file)['y'].T
 
                             ## Full reference database calculations
 
                             if full_reference_genome:  # Do so only if location is entered
 
-                                # Create true_x
-                                try:
-                                    true_x = make_true_x("mock_16S_metagenome.fa", full_reference_genome, bbmap_dir)
-                                except:
-                                    tb = traceback.format_exc()
-                                    error_type, error, _ = sys.exc_info()
-                                    raise Exception(f"error_type: {error_type}\n error: {error}")
-
-
-                                # Reconstruct true_x with MinDivLP
+                                # Reconstruct true_x_full with MinDivLP
                                 x_star = MinDivLP(A_k_small_full.toarray(), A_k_large_full, y_small, y_large, const, q)
 
                                 # Calculate error and support data
-                                l1error = norm(true_x - x_star, 1)
+                                l1error = norm(true_x_full - x_star, 1)
                                 supp_x_star = np.where(x_star > 0)[0]
-                                supp_true_x = np.where(true_x > 0)[0]
-                                support_in_common = np.intersect1d(supp_true_x, supp_x_star)
+                                supp_true_x_full = np.where(true_x_full > 0)[0]
+                                support_in_common = np.intersect1d(supp_true_x_full, supp_x_star)
 
                                 ## Append csv file with results
                                 with open(csv_name, "a", newline="") as f:
@@ -126,35 +150,12 @@ def simulate(large_k, mock_maker, csv_name, bbmap_dir):
                                     writer.writerow(
                                         [small_k, large_k, support_size, coverage, q, const, 1, l1error,
                                          len(supp_x_star), len(support_in_common),
-                                         calculateDiv(true_x, A_k_large_full, q),
+                                         calculateDiv(true_x_full, A_k_large_full, q),
                                          calculateDiv(x_star, A_k_large_full, q)])
 
                             ## Mock reference database calculations (database containing only sequences in mock metagenome)
 
                             if reference_genome:  # Do so only if location is entered
-
-                                # Create true_x
-                                true_x = make_true_x(f"mock_16S_metagenome.fa", reference_genome, bbmap_dir)
-
-                                # Create A_k_small and A_k_large from mock reference database
-                                with tempfile.NamedTemporaryFile() as temp_file:
-                                    output_file = temp_file.name
-
-                                    to_run = f"python ../../src/Form16SSensingMatrix.py -k {small_k} -i {reference_genome} -o {output_file}"
-                                    res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL,
-                                                         stderr=subprocess.DEVNULL)
-                                    if res.returncode != 0:
-                                        raise Exception("Failed to form A_k_small")
-
-                                    A_k_small = sio.loadmat(output_file)['A_k']
-
-                                    to_run = f"python ../../src/Form16SSensingMatrix.py -k {large_k} -i {reference_genome} -o {output_file}"
-                                    res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL,
-                                                         stderr=subprocess.DEVNULL)
-                                    if res.returncode != 0:
-                                        raise Exception("Failed to form A_k_large")
-
-                                    A_k_large = sio.loadmat(output_file)['A_k']
 
                                 # Reconstruct true_x with MinDivLP
                                 x_star = MinDivLP(A_k_small.toarray(), A_k_large, y_small, y_large, const, q)
