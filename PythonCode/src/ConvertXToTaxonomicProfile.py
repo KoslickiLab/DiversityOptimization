@@ -24,7 +24,7 @@ def convertToTaxonomy(x, trainingfasta, trainingtaxonomy, filename):
             profile of x
     """
 
-    x = np.round(1000 * x)  # temporary constant to create counts rather than relative abundances
+    x = np.round(100 * x)  # temporary constant to create counts rather than relative abundances
 
     ## Import tsv data frame or initialize empty dataframe
     if os.path.exists(filename):
@@ -55,9 +55,6 @@ def convertToTaxonomy(x, trainingfasta, trainingtaxonomy, filename):
                 index = includedIDs.index(line[0])
                 taxID_sample[index] = line[1]  # at same index as otu
 
-                # indiv_tax = [a[3:] for a in line[1].split() if len(a) > 4]  # Don't include "k__", "p__", etc.
-                # taxID_sample[index] = "".join(indiv_tax)
-
     ## Create new data frame
     new_data = list()
     indices_to_add = list(range(len(support)))  # Indices within the support of OTUs not included in original data frame
@@ -65,8 +62,8 @@ def convertToTaxonomy(x, trainingfasta, trainingtaxonomy, filename):
     # Add new column to existing rows
     for i in range(df.shape[0]):
         if df["#NAME"][i] in taxID_sample:  # Add abundance if in support
-            index = taxID_sample.index(df["#NAME"][i])  # Index of already included otu in support
-            del indices_to_add[index]
+            index = taxID_sample.index(df["#NAME"][i])  # Index of already included OTU in support
+            indices_to_add.remove(index)
             new_data.append(list(df.loc[i]) + [x[support][index]])
         else:  # Add zero if not in  support
             new_data.append(list(df.loc[i]) + [0])
