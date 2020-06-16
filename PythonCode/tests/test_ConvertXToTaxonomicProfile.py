@@ -15,7 +15,7 @@ tsv_name = "test.tsv"
 
 # Create a randomized x value
 x = np.zeros(99322)
-x[np.random.choice(range(10), size=3)] = [1, 1, 1]
+x[np.random.choice(range(10), size=3, replace=False)] = [1, 1, 1]
 support, = np.where(x > 0)
 
 # Gather possible OTU IDs for comparison
@@ -48,12 +48,15 @@ if os.path.exists(tsv_name):
         next(tax_reader)  # Skip header
 
         for line in tax_reader:
-            previous_taxa.append(line[0])
+            previous_taxa.append(line[-1])
         
 
 # Print each taxID in sample in order
 print("Intended taxonomies to be added or appended:")
 print(possible_taxa[support])
+print("Intended OTU IDs to be added or appended:")
+print(np.array(possible_otu_ids)[support])
+print("Support of x: ", support)
 
 
 ## Run function
@@ -69,15 +72,15 @@ with open(tsv_name, "r") as tax:
     for line in tax_reader:
         print(line)
 
-        if line[0] in possible_taxa[support]:  # Check to make sure correct counts are added
-            index_in_support, = np.where(possible_taxa[support] == line[0])[0]
-            assert line[-1] == str(100 * x[support][index_in_support]), "Nonzero count not added correctly"
+        if line[-1] in possible_taxa[support]:  # Check to make sure correct counts are added
+            index_in_support, = np.where(possible_taxa[support] == line[-1])[0]
+            assert line[-2] == str(100 * x[support][index_in_support]), "Nonzero count not added correctly"
 
-            if not line[0] in previous_taxa:  # Check to make sure new rows only add nonzero count to final column
-                for val in line[1:-1]:
+            if not line[-1] in previous_taxa:  # Check to make sure new rows only add nonzero count to final column
+                for val in line[1:-2]:
                     assert val == '0.0', "Nonzero count added to previous samples"
 
         else:  # Check to make sure counts that aren't supposed to be added are not added
-            assert line[-1] == '0.0', "Nonzero count added that should be zero"
+            assert line[-2] == '0.0', "Nonzero count added that should be zero"
 
 print("\nThe TSV table was appended correctly.")

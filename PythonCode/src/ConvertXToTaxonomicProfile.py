@@ -30,30 +30,30 @@ def convertToTaxonomy(x, trainingfasta, trainingtaxonomy, filename):
     if os.path.exists(filename):
         df = pd.read_csv(filename, delimiter='\t')
     else:
-        df = pd.DataFrame(columns=["#NAME"])
+        df = pd.DataFrame(columns=["#OTU ID", "taxonomy"])
 
     ## Determine OTUs that are in the new sample
     support = np.where(x > 0)[0]
-    includedIDs = list()
+    sample_OTUs = list()
 
     with open(trainingfasta, "r") as fasta:
         i = 0
         for line in fasta:
             if line[0] == ">":
                 if i in support:
-                    includedIDs.append(line[1:-1])
+                    sample_OTUs.append(line[1:-1])
                 i += 1
 
     ## Find taxa of nonzero OTUs and place them in the same order
-    taxID_sample = includedIDs
+    sample_taxIDs = sample_OTUs.copy()
 
     with open(trainingtaxonomy, "r") as tax:
         tax_reader = csv.reader(tax, delimiter='\t')
 
         for line in tax_reader:
-            if line[0] in includedIDs:
-                index = includedIDs.index(line[0])
-                taxID_sample[index] = line[1]  # at same index as otu
+            if line[0] in sample_OTUs:
+                index = sample_OTUs.index(line[0])
+                sample_taxIDs[index] = line[1]  # at same index as OTU
 
     ## Create new data frame
     new_data = list()
@@ -61,18 +61,20 @@ def convertToTaxonomy(x, trainingfasta, trainingtaxonomy, filename):
 
     # Add new column to existing rows
     for i in range(df.shape[0]):
-        if df["#NAME"][i] in taxID_sample:  # Add abundance if in support
-            index = taxID_sample.index(df["#NAME"][i])  # Index of already included OTU in support
+        current_row = list(df.loc[i])
+        if str(df["#OTU ID"][i]) in sample_OTUs:  # Add abundance if in support
+            index = sample_OTUs.index(str(df["#OTU ID"][i]))  # Index of already included OTU in support
             indices_to_add.remove(index)
-            new_data.append(list(df.loc[i]) + [x[support][index]])
+            new_data.append(current_row[:-1] + [x[support][index]] + [current_row[-1]])
         else:  # Add zero if not in  support
-            new_data.append(list(df.loc[i]) + [0])
+            new_data.append(current_row[:-1] + [0] + [current_row[-1]])
 
     # Add new rows
     for i in indices_to_add:
-        new_data.append([taxID_sample[i]] + [0 for _ in range(df.shape[1] - 1)] + [x[support][i]])
+        new_data.append([sample_OTUs[i]] + [0 for _ in range(df.shape[1] - 2)] + [x[support][i]] + [sample_taxIDs[i]])
 
     # Create new data frame
-    new_df = pd.DataFrame(new_data, columns=list(df.columns) + [f"Sample{df.shape[1]}"])
+    column_names = list(df.columns)
+    new_df = pd.DataFrame(new_data, columns=column_names[:-1] + [f"Sample{df.shape[1]-1}"] + [column_names[-1]])
 
     new_df.to_csv(filename, sep='\t', index=False)
