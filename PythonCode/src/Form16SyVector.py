@@ -62,6 +62,6 @@ if __name__ == '__main__':
     if res.returncode != 0:
         raise Exception("An unexpected error was encountered, please check the input FASTA file is in the correct format. If errors persist, contact the developers.")
 
-    y = np.fromstring(res.stdout.decode('utf-8'), sep='\n', dtype=int)
+    y = np.array(list(map(int, res.stdout.decode('utf-8').split())))
     y_norm = y / np.sum(y)
     sio.savemat(output_file_name, {"y": y_norm}, do_compression=True)
