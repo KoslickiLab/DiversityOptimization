@@ -1,5 +1,6 @@
 import numpy as np
-from scipy.optimize import nnls
+from sparse_nnls import sparse_nnls
+from scipy.sparse import vstack
 
 
 def MinDivLP(A_k_small, A_k_large, y_small, y_large, const, q):
@@ -25,7 +26,10 @@ def MinDivLP(A_k_small, A_k_large, y_small, y_large, const, q):
     """
 
     B = A_k_large > 0
-    f = 1 / np.power(B.T @ y_large, 1 - q)
 
-    x_star = nnls(np.vstack((f.T, const * A_k_small)), np.append(0, const * y_small))[0]
+    epsilon = 0.0001
+    denom = np.power(B.T @ y_large, 1 - q) + epsilon
+    f = 1/denom
+
+    x_star = sparse_nnls(vstack((f.T, const * A_k_small)), np.append(0, const * y_small))
     return x_star / sum(x_star)
