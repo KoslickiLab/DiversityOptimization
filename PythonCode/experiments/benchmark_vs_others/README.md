@@ -4,9 +4,6 @@ This directory contains files used for benchmarking MinDivLP against QIIME imple
 # classify_mindivlp.py
 A command line script to create or load sensing matrices, create y vectors, call MinDivLP, and convert the output to TSV and BIOM formats.
 
-# convertToTaxonomy
-A function to convert the reconstructed population into TSV format with columns being OTU IDs, proportions, and taxonomies of a single sample
-
 # taxonomy-assignment-mindivlp.ipynb
 An iPython Notebook to run a parameter sweep of MinDivLP tests and store them with other classification method results. (stored in tax-credit-data/ipynb/mock-community)
 
