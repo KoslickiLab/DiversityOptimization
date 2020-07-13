@@ -1,11 +1,16 @@
 #! /usr/bin/env python
 import argparse
 import os
+import sys
 import subprocess
 import tempfile
 import scipy.io as sio
-from MinDivLP import MinDivLP  # Location may need adjustment
-from convertToTaxonomy import convertToTaxonomy
+from pandas import read_csv
+from csv import writer
+from time import time
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))  # make sure python knows where to find the code
+from src.MinDivLP import MinDivLP
+from src.ConvertXToTaxonomicProfile import convertToTaxonomy
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -25,10 +30,12 @@ if __name__ == '__main__':
                         help="count compliment of sequences as well", default=False)
     parser.add_argument('-r', '--reference', type=str, help="File name of reference database", required=True)
     parser.add_argument('-t', '--taxonomy', type=str, help="File name of reference taxonomy", required=True)
+    parser.add_argument('-p', '--prevent_output', action="store_true",
+                        help="stop output", default=False)
 
     args = parser.parse_args()
-    input_file = args.input_file
-    output_dir = args.output_dir
+    input_file = os.path.abspath(args.input_file)
+    output_dir = os.path.abspath(args.output_dir)
     small_k = args.small_k
     large_k = args.large_k
     const = args.const
@@ -36,6 +43,9 @@ if __name__ == '__main__':
     count_rev = args.count_complements
     reference = args.reference
     taxonomy = args.taxonomy
+    prevent_output = args.prevent_output
+
+    start = time()
 
     ## Check if input files exist:
 
@@ -53,7 +63,8 @@ if __name__ == '__main__':
 
     # large_k
     if not os.path.exists(f"{reference}_A_{large_k}.mat"):
-        to_run = f"python /media/sf_Shared/MinDivLP/src/./Form16SSensingMatrix.py -k {large_k} -i {reference} -o {reference}_A_{large_k}.mat {count_rev*'-c'}"
+        path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../src/Form16SSensingMatrix.py'))
+        to_run = f"""python "{path}" -k {large_k} -i "{reference}" -o "{reference}_A_{large_k}.mat" {count_rev * '-c'}"""
         res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL)
         if res.returncode != 0:
             raise Exception("Failed to form large sensing matrix")
@@ -62,7 +73,8 @@ if __name__ == '__main__':
 
     # small_k
     if not os.path.exists(f"{reference}_A_{small_k}.mat"):
-        to_run = f"python /media/sf_Shared/MinDivLP/src/./Form16SSensingMatrix.py -k {small_k} -i {reference} -o {reference}_A_{small_k}.mat {count_rev*'-c'}"
+        path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../src/Form16SSensingMatrix.py'))
+        to_run = f"""python "{path}" -k {small_k} -i "{reference}" -o "{reference}_A_{small_k}.mat" {count_rev * '-c'}"""
         res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL)
         if res.returncode != 0:
             raise Exception("Failed to form small sensing matrix")
@@ -73,9 +85,10 @@ if __name__ == '__main__':
 
     with tempfile.NamedTemporaryFile() as temp_file:
         t_file = temp_file.name
+        path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../src/Form16SyVector.py'))
 
         # large_k
-        to_run = f"python /media/sf_Shared/MinDivLP/src/./Form16SyVector.py -k {large_k} -i {input_file} -o {t_file} {count_rev * '-c'}"
+        to_run = f"""python "{path}" -k "{large_k}" -i "{input_file}" -o "{t_file}" {count_rev * '-c'}"""
         res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL)
         if res.returncode != 0:
             raise Exception("Failed to form large y vector")
@@ -83,24 +96,44 @@ if __name__ == '__main__':
         y_large = sio.loadmat(t_file)['y'].T
 
         # small_k
-        to_run = f"python /media/sf_Shared/MinDivLP/src/./Form16SyVector.py -k {small_k} -i {input_file} -o {t_file} {count_rev * '-c'}"
+        to_run = f"""python "{path}" -k {small_k} -i "{input_file}" -o "{t_file}" {count_rev * '-c'}"""
         res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL)
         if res.returncode != 0:
             raise Exception("Failed to form small y vector")
 
         y_small = sio.loadmat(t_file)['y'].T
-		
 
     ## Run MinDivLP
 
-    x = MinDivLP(A_k_small.toarray(), A_k_large, y_small, y_large, const, q)
-	
-    ## Convert to TSV, then to BIOM
-    tsv_file = f"{output_dir}/rep_seqs_tax_assignments.txt"
+    print("Running MinDivLP and saving.")
 
-    convertToTaxonomy(x, reference, taxonomy, tsv_file)
+    x = MinDivLP(A_k_small, A_k_large, y_small, y_large, const, q)
 
-    to_run = f"biom convert -i {tsv_file} -o {output_dir}/table.biom --to-json --process-obs-metadata taxonomy"
-    res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL)
-    if res.returncode != 0:
-        raise Exception("Failed to convert TSV to BIOM format")
+    if not prevent_output:
+        ## Convert to TSV, then to BIOM
+        tsv_file = os.path.join(output_dir, "taxonomy.tsv")
+        biom_file = os.path.join(output_dir, "table.biom")
+
+        # Check for metadata in sample-metadata.tsv and extract the sample ID
+        if os.path.exists(os.path.join(os.path.dirname(input_file), "sample-metadata.tsv")):
+            metadata_df = read_csv(os.path.join(os.path.dirname(input_file), "sample-metadata.tsv"), sep='\t', header=0)
+            sample_id = metadata_df.iloc[0]["SampleID"]
+        else:
+            sample_id = "sample"
+
+        convertToTaxonomy(x, reference, taxonomy, sample_id, tsv_file)
+
+        to_run = f"""biom convert -i "{tsv_file}" -o "{biom_file}" --to-json --process-obs-metadata taxonomy"""
+        res = subprocess.run(to_run, shell=True, stdout=subprocess.DEVNULL)
+        if res.returncode != 0:
+            raise Exception("Failed to convert TSV to BIOM format")
+
+        print("Completed.")
+        timer = time() - start
+
+        # Print info useful for checking progress of code
+        print([output_dir.split('/')[-4], small_k, large_k, const, q, timer])
+
+        # Record times
+        with open('times.csv', 'a') as fd:
+            writer(fd).writerow([output_dir.split('/')[-4], small_k, large_k, const, q, timer])
