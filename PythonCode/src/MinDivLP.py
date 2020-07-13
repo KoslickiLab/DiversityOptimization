@@ -1,9 +1,9 @@
 import numpy as np
-from sparse_nnls import sparse_nnls
+from .sparse_nnls import sparse_nnls
 from scipy.sparse import vstack
 
 
-def MinDivLP(A_k_small, A_k_large, y_small, y_large, const, q):
+def MinDivLP(A_k_small, A_k_large, y_small, y_large, const, q, thresh=0.01):
     """ MinDivLP
     A basic, regularized version of the MinDivLP algorithm.
     Call via:
@@ -32,4 +32,6 @@ def MinDivLP(A_k_small, A_k_large, y_small, y_large, const, q):
     f = 1/denom
 
     x_star = sparse_nnls(vstack((f.T, const * A_k_small)), np.append(0, const * y_small))
-    return x_star / sum(x_star)
+    x_star = x_star / sum(x_star)
+    x_star[np.where(x_star < thresh)] = 0  # Set threshold
+    return x_star
