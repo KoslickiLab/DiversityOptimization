@@ -4,7 +4,7 @@ import os
 import csv
 
 
-def convertToTaxonomy(x, trainingfasta, trainingtaxonomy, filename):
+def convertToTaxonomy(x, trainingfasta, trainingtaxonomy, sample_id, filename, append=True):
     """ convertToTaxonomy
         Creates or appends a tsv table with a taxonomic profile from population proportions, a reference database fasta
         file, and the database's taxonomic identifiers
@@ -24,10 +24,8 @@ def convertToTaxonomy(x, trainingfasta, trainingtaxonomy, filename):
             profile of x
     """
 
-    x = np.round(100 * x)  # temporary constant to create counts rather than relative abundances
-
     ## Import tsv data frame or initialize empty dataframe
-    if os.path.exists(filename):
+    if os.path.exists(filename) and append:
         df = pd.read_csv(filename, delimiter='\t')
     else:
         df = pd.DataFrame(columns=["#OTU ID", "taxonomy"])
@@ -75,6 +73,6 @@ def convertToTaxonomy(x, trainingfasta, trainingtaxonomy, filename):
 
     # Create new data frame
     column_names = list(df.columns)
-    new_df = pd.DataFrame(new_data, columns=column_names[:-1] + [f"Sample{df.shape[1]-1}"] + [column_names[-1]])
+    new_df = pd.DataFrame(new_data, columns=column_names[:-1] + [sample_id] + [column_names[-1]])
 
     new_df.to_csv(filename, sep='\t', index=False)
