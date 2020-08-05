@@ -3,7 +3,9 @@ import argparse
 import os
 import subprocess
 import tempfile
+import itertools
 import numpy as np
+from CMash import MinHash as MH
 from scipy.sparse import csc_matrix, save_npz
 
 if __name__ == '__main__':
@@ -15,12 +17,14 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--max_ram', type=int,
                         help="max amount of RAM in GB", default=12)
     parser.add_argument('--ci', type=int,
-                        help="minimum count of appearances for a k-mer to be included", default=2)
+                        help="minimum count of appearances for a k-mer to be included", default=0)
     parser.add_argument('--cs', type=int,
                         help="maximum count of appearances recorded for a k-mer", default=256)
     parser.add_argument('-c', '--count_complements', action="store_true",
                         help="count compliment of sequences as well", default=False)
-    parser.add_argument('-i', '--input_file', type=str, help="File name of input database")
+    parser.add_argument('-i', '--input_file', type=str, help="File name of input data")
+    parser.add_argument('-t', '--training_prefix', type=str,
+                        help="File path to training files (only prefix)", required=True)
     parser.add_argument('-o', '--output_file', type=str,
                         help="Output file of the y-vector in .mat format.",
                         required=True)
@@ -34,6 +38,7 @@ if __name__ == '__main__':
     count_rev = args.count_complements
     input_file_name = args.input_file
     output_file_name = args.output_file
+    training_prefix = args.training_prefix
 
     ## Existence checks (input, kmc, kmc_tools, kmc_dump)
 
@@ -59,65 +64,55 @@ if __name__ == '__main__':
         raise Exception(
             "It appears that kmc_dump is not installed. Please consult the README, install kmc_dump, and try again.")
 
-    # check if fastq or fasta
-    with open(input_file_name, 'r') as fid:
-        line = fid.readline()
-        first_char = line[0]
-        if first_char == '>':
-            is_fasta = True
-        else:
-            is_fasta = False
-
-    ## Run KMC
+    ## Run KMC and intersect
     with tempfile.TemporaryDirectory() as temp_dir:
         with tempfile.NamedTemporaryFile() as kmc_output:
 
             # Count k-mers (note: the output is named f"{kmc_output.name}.pre" and f"{kmc_output.name}.suf")
-            if is_fasta:
-                to_run = f"kmc -k{k_size} {~count_rev * '-b '}-ci{ci} -cs{cs} -fa -m{max_ram} {input_file_name} {kmc_output.name} {temp_dir}"
-            else:
-                to_run = f"kmc -k{k_size} {~count_rev * '-b '}-ci{ci} -cs{cs} -m{max_ram} {input_file_name} {kmc_output.name} {temp_dir}"
-
+            to_run = f"kmc -k{k_size} {~count_rev * '-b '}-ci{ci} -cs{cs} -fm -m{max_ram} {input_file_name} {kmc_output.name} {temp_dir}"
             res = subprocess.run(to_run, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             if res.returncode != 0:
                 raise Exception(
                     "An unexpected error was encountered while running kmc, please check the input FASTA file is in the "
                     "correct format. If errors persist, contact the developers.")
 
-            # Sort the counted k-mers
-            to_run = f"kmc_tools transform {kmc_output.name} sort {kmc_output.name}"
-            res = subprocess.run(to_run, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            if res.returncode != 0:
-                raise Exception("An unexpected error was encountered while running kmc_tools.")
+            with tempfile.NamedTemporaryFile() as intersect_file:
 
-            # Dump the counted k-mers for reading into matrix
-            to_run = f"kmc_dump -ci0 -cs100000 {kmc_output.name} {kmc_output.name}"
-            res = subprocess.run(to_run, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            if res.returncode != 0:
-                raise Exception("An unexpected error was encountered while running kmc_tools.")
+                # Intersect with training kmers, keeping counts of sample kmers
+                to_run = f"kmc_tools simple {training_prefix} {kmc_output.name} intersect {intersect_file.name} -ocright"
+                res = subprocess.run(to_run, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                if res.returncode != 0:
+                    raise Exception("An unexpected error was encountered while running kmc_tools simple.")
+
+                # Dump the intersected counted k-mers for reading into matrix
+                to_run = f"kmc_dump -ci0 -cs100000 {intersect_file.name} {intersect_file.name}"
+                res = subprocess.run(to_run, shell=True, stdout=subprocess.PIPE)
+                if res.returncode != 0:
+                    raise Exception("An unexpected error was encountered while running kmc_tools.")
+
+                ## Load in list of k-mers
+                database = MH.import_multiple_from_single_hdf5(training_prefix + ".h5")
+                kmers = sorted(set(itertools.chain.from_iterable(genome._kmers for genome in database)))
+
+                ## Iterate through KMC's dump file to extract k-mers and their counts while determining
+                #  their corresponding index
+                indices = []
+                data = []
+                for line in intersect_file:
+                    info = line.split()
+                    try:
+                        indices.append(kmers.index(info[0].decode("utf-8")))
+                        data.append(int(info[1]))
+                    except ValueError:
+                        print("k-mer mismatch") ## TODO: Identify why there are so many mismatches
 
 
-            ## Iterate through KMC's dump file to extract k-mers and their counts while converting k-mers to
-            #  their corresponding index
-            bytetoB4 = {65: 0, 67: 1, 71: 2, 84: 3}  # dict to convert byte values of ACGT to their base 4 representation
-            indices = []
-            data = []
-            for line in kmc_output:
-                info = line.split()
-                index = 0
-                for i in range(k_size):
-                    index += bytetoB4[info[0][i]] * 4 ** (k_size - (i + 1))  # Convert base4 (ACTG <-> 0123) to base 10
-                indices.append(index)
-                data.append(int(info[1]))
-
-
-    ## Convert extracted data to csc_matrix (numpy arrays are infeasible)
-    indices = np.array(indices)
-    data = np.array(data)
+    ## Sort the indices and data
+    sorter = sorted(range(len(indices)), key=indices.__getitem__)
+    indices = np.array([indices[i] for i in sorter])
+    data = np.array([data[i] for i in sorter])
     data = data / np.sum(data)
     indptr = np.array([0, len(indices)])
 
-    y = csc_matrix((data, indices, indptr), shape=(4 ** k_size, 1))
-
-    ## Save the csc_matrix as .npz file (.mat does not appear to work well with very large k_size)
-    save_npz(output_file_name, y, compressed=True)
+    ## Create and save a csc_matrix as .npz file
+    save_npz(output_file_name, csc_matrix((data, indices, indptr), shape=(len(indices), 1)), compressed=True)
